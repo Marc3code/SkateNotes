@@ -13,3 +13,7 @@ O **SkateNotes** é uma ferramenta simples, mas poderosa, para qualquer skatista
 
 Sinta-se à vontade para contribuir com sugestões e melhorias!
 
+Desenvolvimento
+
+O SkateNotes foi desenvolvido em React Native com Expo e, no momento, está disponível apenas via APK para Android, pois estamos testando e aprimorando as funcionalidades para chegar a um produto final que seja o mais útil possível dentro do contexto do problema que o app se propõe a resolver. Após a produção de um produto inicial, pretendo lançá-lo nas lojas de aplicativos tanto para iOS quanto para Android.
+
