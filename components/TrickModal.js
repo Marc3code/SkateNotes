@@ -52,6 +52,7 @@ const TrickModal = ({ visible, onClose, trick, onUpdateTrick }) => {
       setIsSaving(false);
     }
     setShowOptions(false);
+    onClose()
   };
 
   const handleShowOptions = () => {
@@ -74,13 +75,6 @@ const TrickModal = ({ visible, onClose, trick, onUpdateTrick }) => {
           <View style={styles.titleContainer}>
             <Text style={styles.modalTitle}>{localTrick?.name}</Text>
           </View>
-          
-          {isSaving && (
-            <View style={styles.savingHeaderContainer}>
-              <ActivityIndicator size="small" color="#FF6347" />
-              <Text style={styles.savingText}>Salvando...</Text>
-            </View>
-          )}
         </View>
 
         <TextInput

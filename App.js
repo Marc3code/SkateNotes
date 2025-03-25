@@ -5,9 +5,8 @@ import {
   FlatList,
   TouchableOpacity,
   StyleSheet,
-  ScrollView,
   TextInput,
-  Alert,
+  Modal,
 } from "react-native";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import ObstacleModal from "./components/ObstacleModal.js";
@@ -21,7 +20,11 @@ export default function App() {
   const [showAddObstacle, setShowAddObstacle] = useState(false);
   const [obstacles, setObstacles] = useState([]);
   const [editingObstacle, setEditingObstacle] = useState(null);
+  const [deletingObstacle, setDeletingObstacle] = useState(null);
   const [editedObstacleName, setEditedObstacleName] = useState("");
+  const [showOptions, setShowOptions] = useState(null);
+  const [showDeleteConfirmation, setShowDeleteConfirmation] = useState(false);
+  const [trickAmount, setTrickAmount] = useState(null);
 
   // Carregar dados
   useEffect(() => {
@@ -51,6 +54,11 @@ export default function App() {
     saveData();
   }, [obstacles]);
 
+  const calculateTrickAmount = (obstacle) => {
+    setTrickAmount(obstacle.length);
+    console.log(trickAmount);
+  };
+
   // Funções para obstáculos
   const handleAddObstacle = () => {
     if (newObstacle.trim()) {
@@ -67,30 +75,47 @@ export default function App() {
     }
   };
 
-  const handleEditObstacle = (obstacleId, newName) => {
-    setObstacles((prev) =>
-      prev.map((obstacle) =>
-        obstacle.id === obstacleId ? { ...obstacle, name: newName } : obstacle
-      )
-    );
+  const handleStartEdit = (obstacle) => {
+    setEditingObstacle(obstacle);
+    setEditedObstacleName(obstacle.name);
+    setShowOptions(null);
+  };
+
+  const handleSaveEdit = () => {
+    if (editedObstacleName.trim() && editingObstacle) {
+      setObstacles((prev) =>
+        prev.map((obstacle) =>
+          obstacle.id === editingObstacle.id
+            ? { ...obstacle, name: editedObstacleName }
+            : obstacle
+        )
+      );
+      setEditingObstacle(null);
+    }
+  };
+
+  const handleStartDelete = (obstacle) => {
+    setDeletingObstacle(obstacle);
+    setShowDeleteConfirmation(true);
+    setShowOptions(null);
+  };
+
+  const handleConfirmDelete = () => {
+    if (deletingObstacle) {
+      setObstacles((prev) => prev.filter((o) => o.id !== deletingObstacle.id));
+      setOpenObstacle(false);
+    }
+    setShowDeleteConfirmation(false);
+    setDeletingObstacle(null);
+  };
+
+  const handleCancelDelete = () => {
+    setShowDeleteConfirmation(false);
     setEditingObstacle(null);
   };
 
-  const handleDeleteObstacle = (obstacleId) => {
-    Alert.alert(
-      "Confirmar Exclusão",
-      "Tem certeza que deseja excluir este obstáculo?",
-      [
-        { text: "Cancelar", style: "cancel" },
-        {
-          text: "Excluir",
-          onPress: () => {
-            setObstacles((prev) => prev.filter((o) => o.id !== obstacleId));
-            setOpenObstacle(false);
-          },
-        },
-      ]
-    );
+  const handleToggleOptions = (obstacleId) => {
+    setShowOptions(showOptions === obstacleId ? null : obstacleId);
   };
 
   // Funções para manobras
@@ -145,6 +170,14 @@ export default function App() {
     setOpenObstacle(true);
   };
 
+  const formatCountTrick = (tricks) => {
+    const count = tricks?.length
+    const message = count > 0 ? `${count} manobra${count === 1 ? '' : 's' } adicionada${count === 1 ? '' : 's' }` : "Ainda não há manobras aqui" 
+
+    
+    return message
+  }
+
   return (
     <View style={styles.container}>
       <Text style={styles.title}>SkateNotes</Text>
@@ -153,67 +186,92 @@ export default function App() {
         data={obstacles}
         keyExtractor={(item) => item.id}
         renderItem={({ item }) => (
-          <ScrollView style={styles.obstacle}>
-            <View style={styles.obstacleHeader}>
-              {editingObstacle?.id === item.id ? (
+          <View style={styles.obstacle}>
+            {editingObstacle?.id === item.id ? (
+              <View style={styles.editContainer}>
                 <TextInput
                   style={styles.editInput}
                   value={editedObstacleName}
                   onChangeText={setEditedObstacleName}
                   autoFocus
                 />
-              ) : (
+                <IconButton
+                  icon="check"
+                  size={20}
+                  onPress={handleSaveEdit}
+                  disabled={!editedObstacleName.trim()}
+                />
+                <IconButton
+                  icon="close"
+                  size={20}
+                  onPress={() => setEditingObstacle(null)}
+                />
+              </View>
+            ) : (
+              <View style={styles.obstacleHeader}>
                 <TouchableOpacity onPress={() => openObstacleModal(item.id)}>
                   <Text style={styles.obstacleText}>{item.name}</Text>
+                  <Text>{formatCountTrick(item?.tricks)}</Text>
                 </TouchableOpacity>
-              )}
 
-              <View style={styles.obstacleActions}>
-                {editingObstacle?.id === item.id ? (
-                  <>
-                    <TouchableOpacity
-                      style={styles.saveButton}
-                      onPress={() =>
-                        handleEditObstacle(item.id, editedObstacleName)
-                      }
-                    >
-                      <Text style={styles.buttonText}>Salvar</Text>
-                    </TouchableOpacity>
-                    <TouchableOpacity
-                      style={styles.cancelButton}
-                      onPress={() => setEditingObstacle(null)}
-                    >
-                      <Text style={styles.buttonText}>Cancelar</Text>
-                    </TouchableOpacity>
-                  </>
-                ) : (
-                  <>
-                    <TouchableOpacity
-                      onPress={() => {
-                        setEditingObstacle(item);
-                        setEditedObstacleName(item.name);
-                      }}
-                    >
-                      <IconButton
-                        icon="pencil"
-                        iconColor="black"
-                      />
-                    </TouchableOpacity>
-                    <TouchableOpacity
-                      onPress={() => handleDeleteObstacle(item.id)}
-                    >
-                      <IconButton
-                        icon="delete"
-                        iconColor="red"
-                      />
-                    </TouchableOpacity>
-                  </>
-                )}
+                <View style={styles.obstacleActions}>
+                  <IconButton
+                    icon="dots-horizontal"
+                    iconColor="black"
+                    onPress={() => handleToggleOptions(item.id)}
+                  />
+                  {showOptions === item.id && (
+                    <View style={styles.optionsContainer}>
+                      <TouchableOpacity
+                        style={styles.optionButton}
+                        onPress={() => handleStartEdit(item)}
+                      >
+                        <Text>Editar</Text>
+                      </TouchableOpacity>
+                      <TouchableOpacity
+                        style={styles.optionButton}
+                        onPress={() => handleStartDelete(item)}
+                      >
+                        <Text style={{ color: "red" }}>Excluir</Text>
+                      </TouchableOpacity>
+                    </View>
+                  )}
+                </View>
               </View>
-            </View>
-          </ScrollView>
+            )}
+          </View>
         )}
       />
+
+      {/* Modal de confirmação de exclusão */}
+      <Modal
+        visible={showDeleteConfirmation}
+        transparent={true}
+        animationType="fade"
+        onRequestClose={handleCancelDelete}
+      >
+        <View style={styles.confirmationOverlay}>
+          <View style={styles.confirmationContainer}>
+            <Text style={styles.confirmationText}>
+              Deseja realmente excluir o obstáculo "{deletingObstacle?.name}"?
+            </Text>
+            <View style={styles.confirmationButtons}>
+              <TouchableOpacity
+                style={[styles.confirmationButton, styles.cancelButton]}
+                onPress={handleCancelDelete}
+              >
+                <Text style={styles.buttonText}>Cancelar</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.confirmationButton, styles.confirmButton]}
+                onPress={handleConfirmDelete}
+              >
+                <Text style={styles.buttonText}>Confirmar</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
 
       <View style={styles.navBar}>
         {["Aprender", "Aprimorar", "Na Base"].map((status) => (
@@ -305,12 +363,33 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     gap: 10,
     marginLeft: 10,
+    position: "relative",
+  },
+  editContainer: {
+    flex: 1,
+    flexDirection: "row",
+    alignItems: "center",
   },
   editInput: {
     flex: 1,
     fontSize: 18,
     backgroundColor: "#fff",
     borderRadius: 5,
+    paddingHorizontal: 10,
+    marginRight: 10,
+  },
+  optionsContainer: {
+    position: "absolute",
+    right: 0,
+    top: 40,
+    backgroundColor: "white",
+    borderRadius: 5,
+    padding: 10,
+    elevation: 3,
+    zIndex: 10,
+  },
+  optionButton: {
+    padding: 8,
   },
   saveButton: {
     backgroundColor: "#4CAF50",
@@ -386,5 +465,41 @@ const styles = StyleSheet.create({
   addButtonText: {
     color: "#fff",
     fontSize: 16,
+  },
+  confirmationOverlay: {
+    flex: 1,
+    backgroundColor: "rgba(0, 0, 0, 0.5)",
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  confirmationContainer: {
+    backgroundColor: "white",
+    padding: 20,
+    borderRadius: 10,
+    width: "80%",
+  },
+  confirmationText: {
+    fontSize: 16,
+    marginBottom: 20,
+    textAlign: "center",
+  },
+  confirmationButtons: {
+    flexDirection: "row",
+    justifyContent: "space-around",
+  },
+  confirmationButton: {
+    paddingVertical: 10,
+    paddingHorizontal: 20,
+    borderRadius: 5,
+  },
+  cancelButton: {
+    backgroundColor: "#757575",
+  },
+  confirmButton: {
+    backgroundColor: "#D32F2F",
+  },
+  buttonText: {
+    color: "#fff",
+    fontWeight: "bold",
   },
 });
