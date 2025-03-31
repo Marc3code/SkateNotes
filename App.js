@@ -7,10 +7,13 @@ import {
   StyleSheet,
   TextInput,
   Modal,
+  Alert,
+  ActivityIndicator
 } from "react-native";
-import AsyncStorage from "@react-native-async-storage/async-storage";
 import ObstacleModal from "./components/ObstacleModal.js";
 import { IconButton } from "react-native-paper";
+
+const API_URL = "http://localhost:5000"; // Altere para o endereço da sua API
 
 export default function App() {
   const [openObstacle, setOpenObstacle] = useState(false);
@@ -24,54 +27,56 @@ export default function App() {
   const [editedObstacleName, setEditedObstacleName] = useState("");
   const [showOptions, setShowOptions] = useState(null);
   const [showDeleteConfirmation, setShowDeleteConfirmation] = useState(false);
-  const [trickAmount, setTrickAmount] = useState(null);
+  const [loading, setLoading] = useState(true);
 
-  // Carregar dados
-  useEffect(() => {
-    const loadData = async () => {
-      try {
-        const storedData = await AsyncStorage.getItem("@SkateNotes:obstacles");
-        if (storedData) setObstacles(JSON.parse(storedData));
-      } catch (error) {
-        console.error("Erro ao carregar dados:", error);
-      }
-    };
-    loadData();
-  }, []);
-
-  // Salvar dados
-  useEffect(() => {
-    const saveData = async () => {
-      try {
-        await AsyncStorage.setItem(
-          "@SkateNotes:obstacles",
-          JSON.stringify(obstacles)
-        );
-      } catch (error) {
-        console.error("Erro ao salvar dados:", error);
-      }
-    };
-    saveData();
-  }, [obstacles]);
-
-  const calculateTrickAmount = (obstacle) => {
-    setTrickAmount(obstacle.length);
-    console.log(trickAmount);
+  const handleApiError = (error) => {
+    console.error("API Error:", error);
+    Alert.alert("Erro", error.message || "Ocorreu um erro ao comunicar com o servidor");
   };
 
+  // Carregar dados da API
+  useEffect(() => {
+    const fetchObstacles = async () => {
+      try {
+        const response = await fetch(`${API_URL}/obstacles`);
+        if (!response.ok) {
+          throw new Error("Erro ao carregar obstáculos");
+        }
+        const data = await response.json();
+        setObstacles(data);
+      } catch (error) {
+        handleApiError(error);
+      } finally {
+        setLoading(false);
+      }
+    };
+    fetchObstacles();
+  }, []);
+
   // Funções para obstáculos
-  const handleAddObstacle = () => {
-    if (newObstacle.trim()) {
-      setObstacles((prev) => [
-        ...prev,
-        {
-          id: Date.now().toString(),
-          name: newObstacle,
-          tricks: [],
+  const handleAddObstacle = async () => {
+    if (!newObstacle.trim()) return;
+
+    try {
+      const response = await fetch(`${API_URL}/obstacles`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
         },
-      ]);
+        body: JSON.stringify({ name: newObstacle }),
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error || "Erro ao adicionar obstáculo");
+      }
+
+      const newObstacleData = await response.json();
+      setObstacles((prev) => [...prev, newObstacleData]);
       setNewObstacle("");
       setShowAddObstacle(false);
+    } catch (error) {
+      handleApiError(error);
     }
   };
 
@@ -81,16 +86,31 @@ export default function App() {
     setShowOptions(null);
   };
 
-  const handleSaveEdit = () => {
-    if (editedObstacleName.trim() && editingObstacle) {
+  const handleSaveEdit = async () => {
+    if (!editedObstacleName.trim() || !editingObstacle) return;
+
+    try {
+      const response = await fetch(`${API_URL}/obstacles/${editingObstacle._id}`, {
+        method: "PUT",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ name: editedObstacleName }),
+      });
+
+      if (!response.ok) {
+        throw new Error("Erro ao atualizar obstáculo");
+      }
+
+      const updatedObstacle = await response.json();
       setObstacles((prev) =>
         prev.map((obstacle) =>
-          obstacle.id === editingObstacle.id
-            ? { ...obstacle, name: editedObstacleName }
-            : obstacle
+          obstacle._id === updatedObstacle._id ? updatedObstacle : obstacle
         )
       );
       setEditingObstacle(null);
+    } catch (error) {
+      handleApiError(error);
     }
   };
 
@@ -100,18 +120,30 @@ export default function App() {
     setShowOptions(null);
   };
 
-  const handleConfirmDelete = () => {
-    if (deletingObstacle) {
-      setObstacles((prev) => prev.filter((o) => o.id !== deletingObstacle.id));
+  const handleConfirmDelete = async () => {
+    if (!deletingObstacle) return;
+
+    try {
+      const response = await fetch(`${API_URL}/obstacles/${deletingObstacle._id}`, {
+        method: "DELETE",
+      });
+
+      if (!response.ok) {
+        throw new Error("Erro ao excluir obstáculo");
+      }
+
+      setObstacles((prev) => prev.filter((o) => o._id !== deletingObstacle._id));
       setOpenObstacle(false);
+      setShowDeleteConfirmation(false);
+      setDeletingObstacle(null);
+    } catch (error) {
+      handleApiError(error);
     }
-    setShowDeleteConfirmation(false);
-    setDeletingObstacle(null);
   };
 
   const handleCancelDelete = () => {
     setShowDeleteConfirmation(false);
-    setEditingObstacle(null);
+    setDeletingObstacle(null);
   };
 
   const handleToggleOptions = (obstacleId) => {
@@ -119,50 +151,115 @@ export default function App() {
   };
 
   // Funções para manobras
-  const addTrickToObstacle = (newTrick) => {
-    setObstacles((prev) =>
-      prev.map((obstacle) =>
-        obstacle.id === selectedObstacleId
-          ? { ...obstacle, tricks: [...obstacle.tricks, newTrick] }
-          : obstacle
-      )
-    );
-  };
-
-  const editTrickName = (obstacleId, trickId, newName) => {
-    setObstacles((prev) =>
-      prev.map((obstacle) => {
-        if (obstacle.id === obstacleId) {
-          return {
-            ...obstacle,
-            tricks: obstacle.tricks.map((trick) =>
-              trick.id === trickId ? { ...trick, name: newName } : trick
-            ),
-          };
+  const addTrickToObstacle = async (newTrick) => {
+    try {
+      const response = await fetch(
+        `${API_URL}/obstacles/${selectedObstacleId}/tricks`,
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            ...newTrick,
+            status: selectedStatus
+          }),
         }
-        return obstacle;
-      })
-    );
+      );
+
+      if (!response.ok) {
+        throw new Error("Erro ao adicionar manobra");
+      }
+
+      const updatedObstacle = await response.json();
+      setObstacles((prev) =>
+        prev.map((obstacle) =>
+          obstacle._id === updatedObstacle._id ? updatedObstacle : obstacle
+        )
+      );
+    } catch (error) {
+      handleApiError(error);
+    }
   };
 
-  const deleteTrick = (obstacleId, trickId) => {
-    setObstacles((prev) =>
-      prev.map((obstacle) => ({
-        ...obstacle,
-        tricks: obstacle.tricks.filter((trick) => trick.id !== trickId),
-      }))
-    );
+  const editTrickName = async (obstacleId, trickId, newName) => {
+    try {
+      const response = await fetch(
+        `${API_URL}/obstacles/${obstacleId}/tricks/${trickId}`,
+        {
+          method: "PUT",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({ name: newName }),
+        }
+      );
+
+      if (!response.ok) {
+        throw new Error("Erro ao atualizar manobra");
+      }
+
+      const updatedObstacle = await response.json();
+      setObstacles((prev) =>
+        prev.map((obstacle) =>
+          obstacle._id === updatedObstacle._id ? updatedObstacle : obstacle
+        )
+      );
+    } catch (error) {
+      handleApiError(error);
+    }
   };
 
-  const updateTrick = (updatedTrick) => {
-    setObstacles((prev) =>
-      prev.map((obstacle) => ({
-        ...obstacle,
-        tricks: obstacle.tricks.map((trick) =>
-          trick.id === updatedTrick.id ? updatedTrick : trick
-        ),
-      }))
-    );
+  const deleteTrick = async (obstacleId, trickId) => {
+    try {
+      const response = await fetch(
+        `${API_URL}/obstacles/${obstacleId}/tricks/${trickId}`,
+        {
+          method: "DELETE",
+        }
+      );
+
+      if (!response.ok) {
+        throw new Error("Erro ao excluir manobra");
+      }
+
+      const updatedObstacle = await response.json();
+      setObstacles((prev) =>
+        prev.map((obstacle) =>
+          obstacle._id === updatedObstacle._id ? updatedObstacle : obstacle
+        )
+      );
+    } catch (error) {
+      handleApiError(error);
+    }
+  };
+
+  const updateTrick = async (updatedTrick) => {
+    try {
+      const response = await fetch(
+        `${API_URL}/obstacles/${selectedObstacleId}/tricks/${updatedTrick._id}`,
+        {
+          method: "PUT",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify(updatedTrick),
+        }
+      );
+
+      if (!response.ok) {
+        throw new Error("Erro ao atualizar manobra");
+      }
+
+      const updatedObstacle = await response.json();
+      setObstacles((prev) =>
+        prev.map((obstacle) =>
+          obstacle._id === updatedObstacle._id ? updatedObstacle : obstacle
+        )
+      );
+    } catch (error) {
+      handleApiError(error);
+    }
   };
 
   const openObstacleModal = (obstacleId) => {
@@ -171,79 +268,83 @@ export default function App() {
   };
 
   const formatCountTrick = (tricks) => {
-    const count = tricks?.length
-    const message = count > 0 ? `${count} manobra${count === 1 ? '' : 's' } adicionada${count === 1 ? '' : 's' }` : "Ainda não há manobras aqui" 
-
-    
-    return message
-  }
+    const count = tricks?.length || 0;
+    return count > 0
+      ? `${count} manobra${count === 1 ? "" : "s"} adicionada${count === 1 ? "" : "s"}`
+      : "Ainda não há manobras aqui";
+  };
 
   return (
     <View style={styles.container}>
       <Text style={styles.title}>SkateNotes</Text>
 
-      <FlatList
-        data={obstacles}
-        keyExtractor={(item) => item.id}
-        renderItem={({ item }) => (
-          <View style={styles.obstacle}>
-            {editingObstacle?.id === item.id ? (
-              <View style={styles.editContainer}>
-                <TextInput
-                  style={styles.editInput}
-                  value={editedObstacleName}
-                  onChangeText={setEditedObstacleName}
-                  autoFocus
-                />
-                <IconButton
-                  icon="check"
-                  size={20}
-                  onPress={handleSaveEdit}
-                  disabled={!editedObstacleName.trim()}
-                />
-                <IconButton
-                  icon="close"
-                  size={20}
-                  onPress={() => setEditingObstacle(null)}
-                />
-              </View>
-            ) : (
-              <View style={styles.obstacleHeader}>
-                <TouchableOpacity onPress={() => openObstacleModal(item.id)}>
-                  <Text style={styles.obstacleText}>{item.name}</Text>
-                  <Text>{formatCountTrick(item?.tricks)}</Text>
-                </TouchableOpacity>
-
-                <View style={styles.obstacleActions}>
-                  <IconButton
-                    icon="dots-horizontal"
-                    iconColor="black"
-                    onPress={() => handleToggleOptions(item.id)}
+      {loading ? (
+        <View style={styles.loadingContainer}>
+          <ActivityIndicator size="large" color="#FF6347" />
+        </View>
+      ) : (
+        <FlatList
+          data={obstacles}
+          keyExtractor={(item) => item._id}
+          renderItem={({ item }) => (
+            <View style={styles.obstacle}>
+              {editingObstacle?._id === item._id ? (
+                <View style={styles.editContainer}>
+                  <TextInput
+                    style={styles.editInput}
+                    value={editedObstacleName}
+                    onChangeText={setEditedObstacleName}
+                    autoFocus
                   />
-                  {showOptions === item.id && (
-                    <View style={styles.optionsContainer}>
-                      <TouchableOpacity
-                        style={styles.optionButton}
-                        onPress={() => handleStartEdit(item)}
-                      >
-                        <Text>Editar</Text>
-                      </TouchableOpacity>
-                      <TouchableOpacity
-                        style={styles.optionButton}
-                        onPress={() => handleStartDelete(item)}
-                      >
-                        <Text style={{ color: "red" }}>Excluir</Text>
-                      </TouchableOpacity>
-                    </View>
-                  )}
+                  <IconButton
+                    icon="check"
+                    size={20}
+                    onPress={handleSaveEdit}
+                    disabled={!editedObstacleName.trim()}
+                  />
+                  <IconButton
+                    icon="close"
+                    size={20}
+                    onPress={() => setEditingObstacle(null)}
+                  />
                 </View>
-              </View>
-            )}
-          </View>
-        )}
-      />
+              ) : (
+                <View style={styles.obstacleHeader}>
+                  <TouchableOpacity onPress={() => openObstacleModal(item._id)}>
+                    <Text style={styles.obstacleText}>{item.name}</Text>
+                    <Text>{formatCountTrick(item?.tricks)}</Text>
+                  </TouchableOpacity>
 
-      {/* Modal de confirmação de exclusão */}
+                  <View style={styles.obstacleActions}>
+                    <IconButton
+                      icon="dots-horizontal"
+                      iconColor="black"
+                      onPress={() => handleToggleOptions(item._id)}
+                    />
+                    {showOptions === item._id && (
+                      <View style={styles.optionsContainer}>
+                        <TouchableOpacity
+                          style={styles.optionButton}
+                          onPress={() => handleStartEdit(item)}
+                        >
+                          <Text>Editar</Text>
+                        </TouchableOpacity>
+                        <TouchableOpacity
+                          style={styles.optionButton}
+                          onPress={() => handleStartDelete(item)}
+                        >
+                          <Text style={{ color: "red" }}>Excluir</Text>
+                        </TouchableOpacity>
+                      </View>
+                    )}
+                  </View>
+                </View>
+              )}
+            </View>
+          )}
+        />
+      )}
+
       <Modal
         visible={showDeleteConfirmation}
         transparent={true}
@@ -321,7 +422,7 @@ export default function App() {
           setOpenObstacle(false);
           setSelectedObstacleId(null);
         }}
-        obstacle={obstacles.find((o) => o.id === selectedObstacleId)}
+        obstacle={obstacles.find((o) => o._id === selectedObstacleId)}
         statusTrick={selectedStatus}
         onAddTrick={addTrickToObstacle}
         onEditTrickName={editTrickName}
@@ -343,6 +444,11 @@ const styles = StyleSheet.create({
     fontWeight: "bold",
     textAlign: "center",
     marginBottom: 20,
+  },
+  loadingContainer: {
+    flex: 1,
+    justifyContent: "center",
+    alignItems: "center",
   },
   obstacle: {
     backgroundColor: "#ddd",
@@ -390,18 +496,6 @@ const styles = StyleSheet.create({
   },
   optionButton: {
     padding: 8,
-  },
-  saveButton: {
-    backgroundColor: "#4CAF50",
-    paddingVertical: 5,
-    paddingHorizontal: 10,
-    borderRadius: 5,
-  },
-  cancelButton: {
-    backgroundColor: "#757575",
-    paddingVertical: 5,
-    paddingHorizontal: 10,
-    borderRadius: 5,
   },
   navBar: {
     flexDirection: "row",
