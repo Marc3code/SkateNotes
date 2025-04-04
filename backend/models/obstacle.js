@@ -28,12 +28,6 @@ const trickSchema = new mongoose.Schema({
   lastPracticed: {
     type: Date
   },
-  difficulty: {
-    type: Number,
-    min: 1,
-    max: 5,
-    default: 3
-  }
 }, {
   timestamps: true // Adiciona createdAt e updatedAt automaticamente
 });

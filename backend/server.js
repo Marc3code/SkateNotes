@@ -2,7 +2,7 @@ const express = require('express');
 const dotenv = require('dotenv');
 const cors = require('cors');
 require('./database');
-const Obstacle = require('./models/Obstacle');
+const Obstacle = require('./models/obstacle');
 
 dotenv.config();
 const app = express();
